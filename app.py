@@ -59,6 +59,7 @@ if st.session_state.anh_chuan_da_cat is None:
     # Hiển thị công cụ cắt cho Bản Chuẩn
     if img_chuan_goc is not None:
         st.write("👉 **Kéo khung xanh để lấy vùng layout:**")
+        # SỬA LỖI: aspect_ratio=None cho phép kéo khung tự do
         cropped_img_chuan = st_cropper(img_chuan_goc, realtime_update=True, box_color='#00FF00', aspect_ratio=None, key="crop_1")
         if st.button("✂️ XÁC NHẬN BẢN CHUẨN"):
             st.session_state.anh_chuan_da_cat = cropped_img_chuan
@@ -97,18 +98,22 @@ else:
     # Hiển thị công cụ cắt cho Bản Thực Tế và Tiến hành So sánh
     if img_thucte_goc is not None:
         st.write("👉 **Kéo khung đỏ sao cho vừa khít với Bản Chuẩn nhất:**")
+        # SỬA LỖI: aspect_ratio=None cho phép kéo khung tự do, key="crop_2" phải khác crop_1
         cropped_img_thucte = st_cropper(img_thucte_goc, realtime_update=True, box_color='#FF0000', aspect_ratio=None, key="crop_2")
         
         if st.button("🔍 XÁC NHẬN & PHÂN TÍCH LỖI"):
             st.write("Gemi đang soi lỗi, đợi một chút nhé...")
             
             # --- XỬ LÝ SO SÁNH ---
+            # Chuyển đổi màu sắc để OpenCV đọc hiểu
             img1 = cv2.cvtColor(np.array(st.session_state.anh_chuan_da_cat), cv2.COLOR_RGB2BGR)
             img2 = cv2.cvtColor(np.array(cropped_img_thucte), cv2.COLOR_RGB2BGR)
             
+            # Cân chỉnh kích thước ảnh 2 bằng ảnh 1
             height, width, _ = img1.shape
             img2_res = cv2.resize(img2, (width, height))
             
+            # Thuật toán bắt lỗi
             g1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
             g2 = cv2.cvtColor(img2_res, cv2.COLOR_BGR2GRAY)
             diff = cv2.absdiff(g1, g2)
