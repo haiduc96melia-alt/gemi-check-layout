@@ -6,35 +6,36 @@ from streamlit_cropper import st_cropper
 import fitz  
 import io
 
-# TẮT GIỚI HẠN BẢO VỆ PIXEL CỦA THƯ VIỆN ẢNH (Khắc phục lỗi DecompressionBombError)
+# Tắt giới hạn pixel nhưng vẫn an toàn nhờ tối ưu RAM bên dưới
 Image.MAX_IMAGE_PIXELS = None
 
-# Cấu hình giao diện
 st.set_page_config(page_title="Gemi Check Layout", layout="centered")
 st.title("Gemi Spot The Difference 🕵️‍♂️")
 
 def lay_so_trang_pdf(file_bytes):
-    """Đếm tổng số trang của file PDF"""
     pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
     return len(pdf_document)
 
+# TỐI ƯU HÓA: Chỉ xử lý 1 lần, hạ DPI và dùng JPEG đệm để cứu RAM
 @st.cache_data
 def xu_ly_file_tai_len(file_bytes, file_name, trang_so=0):
     if file_name.lower().endswith('.pdf'):
         pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
         page = pdf_document.load_page(trang_so) 
-        # Nếu file vẫn quá nặng làm máy bị chậm, bạn có thể giảm dpi=200 xuống dpi=150 ở dòng dưới
-        pix = page.get_pixmap(dpi=200) 
+        
+        # Hạ dpi xuống 100 để máy chủ miễn phí không bị sập (trước là 200)
+        pix = page.get_pixmap(dpi=100) 
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        # Dùng JPEG chất lượng cao thay vì PNG để siêu tiết kiệm bộ nhớ
+        img.save(buf, format="JPEG", quality=90)
         buf.seek(0)
         return Image.open(buf)
     else:
-        return Image.open(io.BytesIO(file_bytes))
+        # Nếu là ảnh thường, đảm bảo chuyển về hệ màu chuẩn
+        return Image.open(io.BytesIO(file_bytes)).convert("RGB")
 
-# Khởi tạo bộ nhớ tạm
 if 'anh_chuan_da_cat' not in st.session_state:
     st.session_state.anh_chuan_da_cat = None
 
@@ -100,7 +101,7 @@ else:
     else:
         pic_2 = st.camera_input("Chụp bản thực tế tại xưởng", key="cam_2")
         if pic_2 is not None:
-            img_thucte_goc = Image.open(pic_2)
+            img_thucte_goc = Image.open(pic_2).convert("RGB")
 
     if img_thucte_goc is not None:
         st.write("👉 **Kéo khung đỏ sao cho vừa khít với Bản Chuẩn nhất:**")
