@@ -6,6 +6,9 @@ from streamlit_cropper import st_cropper
 import fitz  
 import io
 
+# TẮT GIỚI HẠN BẢO VỆ PIXEL CỦA THƯ VIỆN ẢNH (Khắc phục lỗi DecompressionBombError)
+Image.MAX_IMAGE_PIXELS = None
+
 # Cấu hình giao diện
 st.set_page_config(page_title="Gemi Check Layout", layout="centered")
 st.title("Gemi Spot The Difference 🕵️‍♂️")
@@ -15,16 +18,15 @@ def lay_so_trang_pdf(file_bytes):
     pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
     return len(pdf_document)
 
-# SỬA LỖI: Dùng @st.cache_data để chỉ xử lý PDF 1 lần, không bị lag khi kéo khung cắt
 @st.cache_data
 def xu_ly_file_tai_len(file_bytes, file_name, trang_so=0):
     if file_name.lower().endswith('.pdf'):
         pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
         page = pdf_document.load_page(trang_so) 
+        # Nếu file vẫn quá nặng làm máy bị chậm, bạn có thể giảm dpi=200 xuống dpi=150 ở dòng dưới
         pix = page.get_pixmap(dpi=200) 
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         
-        # SỬA LỖI ĐỊNH DẠNG: Ép ảnh vừa tạo thành chuẩn PNG để st_cropper không bị lỗi
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
@@ -47,7 +49,7 @@ if st.session_state.anh_chuan_da_cat is None:
     if loai_anh_1 == "Tải file (PDF/Ảnh)":
         file_1 = st.file_uploader("Chọn file layout gốc", type=['pdf', 'jpg', 'jpeg', 'png'], key="file_1")
         if file_1 is not None:
-            file_bytes_1 = file_1.getvalue() # Lấy dữ liệu an toàn
+            file_bytes_1 = file_1.getvalue()
             if file_1.name.lower().endswith('.pdf'):
                 tong_so_trang = lay_so_trang_pdf(file_bytes_1)
                 if tong_so_trang > 1:
@@ -85,7 +87,7 @@ else:
     if loai_anh_2 == "Tải file (PDF/Ảnh)":
         file_2 = st.file_uploader("Chọn file thực tế", type=['pdf', 'jpg', 'jpeg', 'png'], key="file_2")
         if file_2 is not None:
-            file_bytes_2 = file_2.getvalue() # Lấy dữ liệu an toàn
+            file_bytes_2 = file_2.getvalue()
             if file_2.name.lower().endswith('.pdf'):
                 tong_so_trang_2 = lay_so_trang_pdf(file_bytes_2)
                 if tong_so_trang_2 > 1:
@@ -118,16 +120,15 @@ else:
             g2 = cv2.cvtColor(img2_res, cv2.COLOR_BGR2GRAY)
             diff = cv2.absdiff(g1, g2)
             
-            # Thuật toán bắt lỗi (Độ nhạy: 40)
             _, thresh = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
             cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             count = 0
             for c in cnts:
-                if cv2.contourArea(c) < 800: # Lọc bỏ các hạt bụi (Pixel < 800)
+                if cv2.contourArea(c) < 800:
                     continue
                 x, y, w, h = cv2.boundingRect(c)
-                cv2.rectangle(img1, (x, y), (x + w, y + h), (0, 0, 255), 4) # Khoanh đỏ
+                cv2.rectangle(img1, (x, y), (x + w, y + h), (0, 0, 255), 4)
                 count += 1
 
             img_result = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
