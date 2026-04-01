@@ -14,6 +14,37 @@ Image.MAX_IMAGE_PIXELS = None
 st.set_page_config(page_title="Gemi Check Layout", layout="wide")
 
 # ==========================================
+# MÃ CSS TẠO THANH CUỘN (SCROLLBAR) NHƯ EXCEL
+# ==========================================
+st.markdown("""
+    <style>
+    /* Ép 2 cột chính hiển thị thanh cuộn trái/phải, lên/xuống nếu ảnh quá to */
+    [data-testid="column"] {
+        overflow: auto;
+        height: 75vh; /* Chiều cao cửa sổ bằng 75% màn hình */
+        border: 1px solid #ddd; /* Tạo khung viền mờ cho dễ nhìn */
+        padding: 10px;
+        border-radius: 5px;
+    }
+    /* Chỉnh thanh cuộn cho đẹp mắt hơn */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #888; 
+        border-radius: 5px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #555; 
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ==========================================
 # THUẬT TOÁN AI: TỰ ĐỘNG CĂN CHỈNH ẢNH
 # ==========================================
 def can_chinh_anh_tu_dong(img_chuan, img_thucte):
@@ -50,18 +81,19 @@ def can_chinh_anh_tu_dong(img_chuan, img_thucte):
         return cv2.resize(img_thucte, (img_chuan.shape[1], img_chuan.shape[0]))
 
 # ==========================================
-# HÀM XỬ LÝ PDF VÀ ẢNH
+# HÀM XỬ LÝ PDF VÀ ẢNH (Cố định độ nét DPI=150)
 # ==========================================
 def lay_so_trang_pdf(file_bytes):
     pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
     return len(pdf_document)
 
 @st.cache_data
-def xu_ly_file_tai_len(file_bytes, file_name, trang_so=0, dpi=100):
+def xu_ly_file_tai_len(file_bytes, file_name, trang_so=0):
     if file_name.lower().endswith('.pdf'):
         pdf_document = fitz.open(stream=file_bytes, filetype="pdf")
         page = pdf_document.load_page(trang_so) 
-        pix = page.get_pixmap(dpi=dpi) 
+        # Cố định DPI 150 để ảnh nét to mà không sập RAM
+        pix = page.get_pixmap(dpi=150) 
         img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=90)
@@ -70,9 +102,8 @@ def xu_ly_file_tai_len(file_bytes, file_name, trang_so=0, dpi=100):
     else:
         return Image.open(io.BytesIO(file_bytes)).convert("RGB")
 
-
 # ==========================================
-# THANH CÔNG CỤ BÊN TRÁI (CHỈ ĐỂ QUẢN LÝ DỮ LIỆU EXCEL)
+# THANH CÔNG CỤ BÊN TRÁI (QUẢN LÝ DỮ LIỆU EXCEL)
 # ==========================================
 st.sidebar.header("📋 Cơ sở dữ liệu")
 file_excel_db = st.sidebar.file_uploader("Tải file Excel Mã Đơn Hàng", type=['xlsx', 'xls'])
@@ -88,12 +119,11 @@ if file_excel_db:
 
 st.title("Gemi Spot The Difference 🕵️‍♂️")
 
-# Bộ nhớ tạm
 if 'anh_chuan_da_cat' not in st.session_state: st.session_state.anh_chuan_da_cat = None
 if 'lich_su_kiem_tra' not in st.session_state: st.session_state.lich_su_kiem_tra = []
 
 # ==========================================
-# KHU VỰC LÀM VIỆC CHÍNH
+# KHU VỰC LÀM VIỆC CHÍNH (ĐÃ CÓ THANH CUỘN)
 # ==========================================
 col_trai, col_phai = st.columns(2)
 
@@ -107,26 +137,23 @@ with col_trai:
         if file_1 is not None:
             file_bytes_1 = file_1.getvalue()
             
-            # --- TÍNH NĂNG CHỌN TRANG PDF ---
+            # --- CHỌN TRANG PDF ---
             trang_chon_1 = 1
             if file_1.name.lower().endswith('.pdf'):
                 tong_so_trang = lay_so_trang_pdf(file_bytes_1)
                 if tong_so_trang > 1:
                     trang_chon_1 = st.number_input(f"File có {tong_so_trang} trang. Chọn trang:", min_value=1, max_value=tong_so_trang, value=1, key="num_1")
             
-            # --- TÍNH NĂNG ZOOM DƯỚI ẢNH BƯỚC 1 ---
-            zoom_1 = st.slider("🔍 Thu phóng độ nét (Zoom):", min_value=100, max_value=300, value=100, step=50, key="slider_z1")
-            
-            # Xử lý ảnh với thông số vừa chọn
+            # Xử lý ảnh luôn ở mức 150 DPI
             if file_1.name.lower().endswith('.pdf'):
-                img_chuan_goc = xu_ly_file_tai_len(file_bytes_1, file_1.name, trang_chon_1 - 1, dpi=zoom_1)
+                img_chuan_goc = xu_ly_file_tai_len(file_bytes_1, file_1.name, trang_chon_1 - 1)
             else:
-                img_chuan_goc = xu_ly_file_tai_len(file_bytes_1, file_1.name, dpi=zoom_1)
+                img_chuan_goc = xu_ly_file_tai_len(file_bytes_1, file_1.name)
                 
         if img_chuan_goc is not None:
-            st.info("Kéo khung xanh để lấy vùng layout:")
-            # Sửa lỗi "Oh no" bằng cách nối giá trị zoom vào key
-            cropped_img_chuan = st_cropper(img_chuan_goc, realtime_update=True, box_color='#00FF00', aspect_ratio=None, key=f"crop_1_z{zoom_1}")
+            st.info("Dùng thanh cuộn bên cạnh/bên dưới để xem toàn bộ ảnh:")
+            # Khung cắt cố định Key
+            cropped_img_chuan = st_cropper(img_chuan_goc, realtime_update=True, box_color='#00FF00', aspect_ratio=None, key="crop_1")
             if st.button("✂️ XÁC NHẬN BẢN CHUẨN", use_container_width=True):
                 st.session_state.anh_chuan_da_cat = cropped_img_chuan
                 st.rerun()
@@ -139,7 +166,7 @@ with col_trai:
 
 # --- BƯỚC 2: BẢN THỰC TẾ ---
 with col_phai:
-    st.subheader("2️⃣ Bản Thực Tế (Bản Test/Bình Bản)")
+    st.subheader("2️⃣ Bản Thực Tế")
     if st.session_state.anh_chuan_da_cat is not None:
         file_2 = st.file_uploader("Tải file thực tế hoặc chụp ảnh", type=['pdf', 'jpg', 'jpeg', 'png'], key="file_2")
         img_thucte_goc = None
@@ -147,32 +174,28 @@ with col_phai:
         if file_2 is not None:
             file_bytes_2 = file_2.getvalue()
             
-            # --- TÍNH NĂNG CHỌN TRANG PDF ---
+            # --- CHỌN TRANG PDF ---
             trang_chon_2 = 1
             if file_2.name.lower().endswith('.pdf'):
                 tong_so_trang_2 = lay_so_trang_pdf(file_bytes_2)
                 if tong_so_trang_2 > 1:
                     trang_chon_2 = st.number_input(f"File có {tong_so_trang_2} trang. Chọn trang:", min_value=1, max_value=tong_so_trang_2, value=1, key="num_2")
             
-            # --- TÍNH NĂNG ZOOM DƯỚI ẢNH BƯỚC 2 ---
-            zoom_2 = st.slider("🔍 Thu phóng độ nét (Zoom):", min_value=100, max_value=300, value=100, step=50, key="slider_z2")
-            
+            # Xử lý ảnh luôn ở mức 150 DPI
             if file_2.name.lower().endswith('.pdf'):
-                img_thucte_goc = xu_ly_file_tai_len(file_bytes_2, file_2.name, trang_chon_2 - 1, dpi=zoom_2)
+                img_thucte_goc = xu_ly_file_tai_len(file_bytes_2, file_2.name, trang_chon_2 - 1)
             else:
-                img_thucte_goc = xu_ly_file_tai_len(file_bytes_2, file_2.name, dpi=zoom_2)
+                img_thucte_goc = xu_ly_file_tai_len(file_bytes_2, file_2.name)
 
         if img_thucte_goc is not None:
-            st.info("Kéo khung đỏ. AI sẽ tự động căn chỉnh lại cho khớp Bản Chuẩn!")
-            # Sửa lỗi "Oh no" bằng cách nối giá trị zoom vào key
-            cropped_img_thucte = st_cropper(img_thucte_goc, realtime_update=True, box_color='#FF0000', aspect_ratio=None, key=f"crop_2_z{zoom_2}")
+            st.info("Dùng thanh cuộn bên cạnh/bên dưới để xem toàn bộ ảnh:")
+            cropped_img_thucte = st_cropper(img_thucte_goc, realtime_update=True, box_color='#FF0000', aspect_ratio=None, key="crop_2")
             
             if st.button("🔍 CĂN CHỈNH AI & PHÂN TÍCH LỖI", type="primary", use_container_width=True):
                 with st.spinner('AI đang tự động nắn ảnh và soi lỗi...'):
                     img1 = cv2.cvtColor(np.array(st.session_state.anh_chuan_da_cat), cv2.COLOR_RGB2BGR)
                     img2_raw = cv2.cvtColor(np.array(cropped_img_thucte), cv2.COLOR_RGB2BGR)
                     
-                    # Căn chỉnh AI
                     img2_aligned = can_chinh_anh_tu_dong(img1, img2_raw)
                     
                     g1 = cv2.GaussianBlur(cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY), (5,5), 0)
@@ -202,7 +225,7 @@ with col_phai:
                     st.session_state.so_loi_hien_tai = count
 
 # ==========================================
-# KHU VỰC LƯU BÁO CÁO 
+# KHU VỰC LƯU BÁO CÁO NẰM NGOÀI KHUNG CUỘN
 # ==========================================
 if 'so_loi_hien_tai' in st.session_state:
     st.markdown("---")
