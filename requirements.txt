@@ -4,3 +4,5 @@ numpy
 Pillow
 streamlit-cropper
 PyMuPDF
+pandas
+openpyxl
